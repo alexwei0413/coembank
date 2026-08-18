@@ -14,10 +14,13 @@
 #           因為圖片與日誌原文都掛在同一個站台。
 #
 # 用法：
-#   bash deploy_A.sh            # 正式執行
-#   DRY_RUN=1 bash deploy_A.sh  # 只印出將要做的事，不實際寫入
+#   bash deploy_A.sh                         # 預演，不實際寫入
+#   APPLY=1 DRY_RUN=0 bash deploy_A.sh       # 建立／更新草稿
+#   APPLY=1 DRY_RUN=0 POST_STATUS=publish \
+#     PUBLISH_APPROVED=1 bash deploy_A.sh    # 已取得發布核准後才可發佈
 ###############################################################################
-set -uo pipefail
+set -Eeuo pipefail
+umask 077
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 0. 連線設定 —  ▶▶ 執行前請確認這一段 ◀◀
@@ -38,7 +41,12 @@ CPT_JOURNAL="cb_journal"
 TAX_SPACE="cb_space"          # 作品空間別分類法
 TAX_JOURNAL_CAT="category"    # 日誌分類；若主題另註冊請改成 cb_journal_cat 等
 
-DRY_RUN="${DRY_RUN:-0}"
+DRY_RUN="${DRY_RUN:-1}"
+APPLY="${APPLY:-0}"
+POST_STATUS="${POST_STATUS:-draft}"
+PUBLISH_APPROVED="${PUBLISH_APPROVED:-0}"
+EXPECTED_HOST="comebank.com.tw"
+PHP_IMPORTER=""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 小工具
@@ -48,12 +56,43 @@ ok()   { printf '\033[1;32m✓ %s\033[0m\n' "$*" >&2; }
 warn() { printf '\033[1;33m! %s\033[0m\n' "$*" >&2; }
 die()  { printf '\033[1;31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
+cleanup() {
+  if [[ -n "${PHP_IMPORTER:-}" && -f "$PHP_IMPORTER" ]]; then
+    rm -f -- "$PHP_IMPORTER" || true
+  fi
+}
+trap cleanup EXIT
+
+case "$DRY_RUN" in 0|1) ;; *) die "DRY_RUN 只接受 0 或 1。" ;; esac
+case "$APPLY" in 0|1) ;; *) die "APPLY 只接受 0 或 1。" ;; esac
+case "$PUBLISH_APPROVED" in 0|1) ;; *) die "PUBLISH_APPROVED 只接受 0 或 1。" ;; esac
+case "$POST_STATUS" in draft|publish) ;; *) die "POST_STATUS 只接受 draft 或 publish。" ;; esac
+
+if [[ "$DRY_RUN" == "0" && "$APPLY" != "1" ]]; then
+  die "正式寫入必須同時設定 APPLY=1 與 DRY_RUN=0。"
+fi
+if [[ "$POST_STATUS" == "publish" && "$PUBLISH_APPROVED" != "1" ]]; then
+  die "發布必須另外設定 PUBLISH_APPROVED=1；未核准內容只能建立為 draft。"
+fi
+
 run() {  # 包一層方便 DRY_RUN 觀察
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '   [dry-run] %s\n' "$*" >&2
     return 0
   fi
   "$@"
+}
+
+validate_source_url() {
+  local url="$1" host
+  [[ "$url" == https://* ]] || die "來源必須使用 HTTPS：${url}"
+  host="${url#https://}"
+  host="${host%%/*}"
+  host="${host%%:*}"
+  case "${host,,}" in
+    "${EXPECTED_HOST,,}"|"www.${EXPECTED_HOST,,}") ;;
+    *) die "拒絕非核准來源網域：${host}" ;;
+  esac
 }
 
 # 確保某分類法的詞彙存在，回傳 term_id（以名稱比對）
@@ -73,12 +112,20 @@ ensure_term() {  # $1=taxonomy  $2=term-name
 command -v wp >/dev/null 2>&1 || die "找不到 wp-cli，請先安裝或調整 WP=() 呼叫方式。"
 "${WP[@]}" core is-installed 2>/dev/null || die "WP-CLI 連不到站台（WP_PATH=${WP_PATH}）。"
 
+SITE_URL="$("${WP[@]}" option get siteurl 2>/dev/null)"
+validate_source_url "$SITE_URL"
+validate_source_url "$IMG_BASE"
+
 for cpt in "$CPT_PORTFOLIO" "$CPT_JOURNAL"; do
   "${WP[@]}" post-type get "$cpt" >/dev/null 2>&1 \
-    || warn "找不到自訂型別 ${cpt}（主題可能尚未註冊）— 仍會嘗試建立。"
+    || die "找不到自訂型別 ${cpt}；停止，避免寫入錯誤型別。"
+done
+for tax in "$TAX_SPACE" "$TAX_JOURNAL_CAT"; do
+  "${WP[@]}" taxonomy get "$tax" >/dev/null 2>&1 \
+    || die "找不到分類法 ${tax}；停止，避免部分部署。"
 done
 
-ok "前置檢查完成，站台：$("${WP[@]}" option get siteurl 2>/dev/null)"
+ok "前置檢查完成，站台：${SITE_URL}；狀態=${POST_STATUS}；DRY_RUN=${DRY_RUN}"
 
 ###############################################################################
 # ①  作品集：樂．悠揚
@@ -120,12 +167,12 @@ else
   ok "圖片匯入完成；封面 live11-${COVER_INDEX} → 附件 ID=${COVER_ID}"
   ok "gallery IDs：${gallery_csv}"
 
-  # --- 2) 建立作品（直接 publish）-------------------------------------------
+  # --- 2) 建立作品（預設 draft；發布需額外核准）------------------------------
   log "建立 ${CPT_PORTFOLIO}：${PORTFOLIO_TITLE}"
   PID="$(run "${WP[@]}" post create \
            --post_type="$CPT_PORTFOLIO" \
            --post_title="$PORTFOLIO_TITLE" \
-           --post_status=publish \
+           --post_status="$POST_STATUS" \
            --porcelain)"
   [[ "$DRY_RUN" == "1" ]] && PID="DRYPID"
   [[ -n "$PID" ]] || die "建立作品失敗。"
@@ -180,12 +227,20 @@ PHP_IMPORTER="$(mktemp /tmp/cb_journal_import.XXXXXX.php)"
 cat > "$PHP_IMPORTER" <<'PHP'
 <?php
 /**
- * 用法：wp eval-file importer.php <src_url> <category> <post_type> <taxonomy> <status>
+ * 用法：wp eval-file importer.php <src_url> <category> <post_type> <taxonomy> <status> <expected_host>
  * 抓官網單篇文章：標題 + 內文 HTML + 內嵌圖片（sideload 進媒體庫並改寫 src），
  * 建立日誌、指定分類、設定精選圖、發佈。
  */
-list($src, $category, $post_type, $taxonomy, $status) = array_pad($args, 5, '');
+list($src, $category, $post_type, $taxonomy, $status, $expected_host) = array_pad($args, 6, '');
 if (!$src) { WP_CLI::error('缺少來源網址'); }
+
+$src_parts = wp_parse_url($src);
+$source_host = strtolower((string)($src_parts['host'] ?? ''));
+$expected_host = strtolower((string)$expected_host);
+if (($src_parts['scheme'] ?? '') !== 'https' ||
+    !in_array($source_host, [$expected_host, 'www.' . $expected_host], true)) {
+  WP_CLI::error('拒絕非核准來源網址：' . $src);
+}
 
 require_once ABSPATH . 'wp-admin/includes/media.php';
 require_once ABSPATH . 'wp-admin/includes/file.php';
@@ -193,9 +248,13 @@ require_once ABSPATH . 'wp-admin/includes/image.php';
 
 $resp = wp_remote_get($src, [
   'timeout'    => 45,
+  'redirection'=> 3,
+  'reject_unsafe_urls' => true,
   'user-agent' => 'Mozilla/5.0 (compatible; comebank-content-factory/1.0)',
 ]);
 if (is_wp_error($resp)) { WP_CLI::error('抓取失敗：' . $resp->get_error_message()); }
+$status_code = wp_remote_retrieve_response_code($resp);
+if ($status_code !== 200) { WP_CLI::error('來源回應非 200：HTTP ' . $status_code); }
 $html = wp_remote_retrieve_body($resp);
 if (!$html) { WP_CLI::error('來源無內容：' . $src); }
 
@@ -231,12 +290,13 @@ foreach ([
 }
 if (!$content_node) { WP_CLI::error('找不到內文區塊：' . $src); }
 
-/* 先建立空文章拿到 ID（圖片要掛在此文章下）*/
+/* 先建立草稿／已核准文章拿到 ID；來源 meta 同步寫入以確保重跑可識別。 */
 $post_id = wp_insert_post([
   'post_type'   => $post_type,
   'post_title'  => $title,
   'post_status' => $status,
   'post_content'=> '',
+  'meta_input'  => ['_cb_source_url' => $src],
 ], true);
 if (is_wp_error($post_id)) { WP_CLI::error('建立文章失敗：' . $post_id->get_error_message()); }
 
@@ -267,8 +327,12 @@ foreach ($content_node->childNodes as $child) {
   $content .= $doc->saveHTML($child);
 }
 
-/* 寫回內文 */
-wp_update_post(['ID' => $post_id, 'post_content' => $content]);
+/* 寫回經 WordPress 白名單清理的內文。 */
+$updated = wp_update_post([
+  'ID' => $post_id,
+  'post_content' => wp_kses_post($content),
+], true);
+if (is_wp_error($updated)) { WP_CLI::error('寫入內文失敗：' . $updated->get_error_message()); }
 
 /* 分類：確保存在並指定 */
 if ($category) {
@@ -295,6 +359,7 @@ for entry in "${JOURNALS[@]}"; do
     warn "略過未填網址的日誌（分類=${cat_name}）：請在腳本頂端填入 URL_* 後再跑。"
     continue
   fi
+  validate_source_url "$src"
 
   # 以來源網址查重，避免重複建立（用 meta 記錄來源）
   dup="$("${WP[@]}" post list --post_type="$CPT_JOURNAL" \
@@ -312,7 +377,7 @@ for entry in "${JOURNALS[@]}"; do
   fi
 
   out="$("${WP[@]}" eval-file "$PHP_IMPORTER" \
-          "$src" "$cat_name" "$CPT_JOURNAL" "$TAX_JOURNAL_CAT" "publish" 2>&1)"
+          "$src" "$cat_name" "$CPT_JOURNAL" "$TAX_JOURNAL_CAT" "$POST_STATUS" "$EXPECTED_HOST" 2>&1)"
   echo "   $out" >&2
 
   # 記錄來源 URL（供查重）
@@ -323,6 +388,7 @@ for entry in "${JOURNALS[@]}"; do
   fi
 done
 
-rm -f "$PHP_IMPORTER"
+rm -f -- "$PHP_IMPORTER"
+PHP_IMPORTER=""
 
-ok "===== A 線部署結束 ====="
+ok "===== A 線部署結束；請以 WP 後台／REST 回讀內容與狀態後再核准發布 ====="
