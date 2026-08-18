@@ -1,17 +1,60 @@
 name: CI
 
-on: [push]
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-
+  validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
-    - uses: actions/checkout@v1
-    - name: Run a one-line script
-      run: echo Hello, world!
-    - name: Run a multi-line script
-      run: |
-        echo Add other actions to build,
-        echo test, and deploy your project.
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        if: ${{ hashFiles('scripts/*.mjs', 'tests/*.mjs') != '' }}
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Validate Bash syntax
+        if: ${{ hashFiles('scripts/*.sh') != '' }}
+        shell: bash
+        run: bash -n scripts/*.sh
+
+      - name: Run ShellCheck
+        if: ${{ hashFiles('scripts/*.sh') != '' }}
+        shell: bash
+        run: |
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes shellcheck
+          fi
+          shellcheck scripts/*.sh
+
+      - name: Validate JavaScript syntax
+        if: ${{ hashFiles('scripts/*.mjs') != '' }}
+        shell: bash
+        run: |
+          for file in scripts/*.mjs; do
+            node --check "$file"
+          done
+
+      - name: Enforce content approval gates
+        if: ${{ hashFiles('scripts/page-factory.mjs', 'content/pages/pages.json') != '' }}
+        run: node scripts/page-factory.mjs --validate-only
+
+      - name: Run Node.js tests
+        if: ${{ hashFiles('tests/*.test.mjs') != '' }}
+        run: node --test tests/*.test.mjs
