@@ -1,5 +1,5 @@
 [
-  { "slug": "service", "title": "服務與預算", "file": "service.html", "status": "publish" },
-  { "slug": "contact", "title": "聯絡我們", "file": "contact.html", "status": "publish" },
-  { "slug": "about", "title": "關於我們", "file": "about.html", "status": "publish" }
+  { "slug": "service", "title": "服務與預算", "file": "service.html", "status": "draft" },
+  { "slug": "contact", "title": "聯絡我們", "file": "contact.html", "status": "draft" },
+  { "slug": "about", "title": "關於我們", "file": "about.html", "status": "draft" }
 ]
