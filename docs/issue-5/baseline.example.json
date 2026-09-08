@@ -1,0 +1,133 @@
+{
+  "schema_version": "0.1-draft",
+  "snapshot_id": "DRYRUN-20260908-150000",
+  "captured_at": "2026-09-08T15:00:00+08:00",
+  "source_cutoff_at": "2026-09-08T14:45:00+08:00",
+  "timezone": "Asia/Taipei",
+  "mode": "DRY_RUN",
+  "projects": [
+    {
+      "record_id": "SAMPLE-001",
+      "case_key": "CASE-DEMO-001",
+      "case_name": "匿名示例案 A",
+      "owners": ["role:designer-a"],
+      "collaborators": [],
+      "phase": "施工圖",
+      "last_verified_progress": {
+        "summary": "固定 fixture 的已驗證示例進度",
+        "verified_at": "2026-09-08T10:00:00+08:00",
+        "evidence_refs": [
+          {
+            "source": "FIXTURE",
+            "ref": "fixture://case-demo-001/progress-1",
+            "observed_at": "2026-09-08T10:00:00+08:00"
+          }
+        ]
+      },
+      "today_completed": "完成匿名示例圖面自檢",
+      "next_step": "交由獨立 reviewer 檢查",
+      "planned_completion_date": "2026-09-15",
+      "blockers": [],
+      "director_decisions": [],
+      "evidence_refs": [
+        {
+          "source": "FIXTURE",
+          "ref": "fixture://case-demo-001/daily-1",
+          "observed_at": "2026-09-08T14:30:00+08:00"
+        }
+      ],
+      "evidence_status": "VERIFIED",
+      "traffic_light": "正常",
+      "last_verified_at": "2026-09-08T14:30:00+08:00",
+      "verified_by": "fixture-validator"
+    },
+    {
+      "record_id": "SAMPLE-002",
+      "case_key": "CASE-DEMO-002",
+      "case_name": "匿名示例案 B",
+      "owners": ["role:designer-b"],
+      "collaborators": ["role:reviewer-a"],
+      "phase": "報價",
+      "last_verified_progress": {
+        "summary": "只有工作者敘述，尚待證據回讀",
+        "verified_at": null,
+        "evidence_refs": []
+      },
+      "today_completed": "整理報價草稿",
+      "next_step": "補齊成本來源並送覆核",
+      "planned_completion_date": "2026-09-09",
+      "blockers": [],
+      "director_decisions": [],
+      "evidence_refs": [],
+      "evidence_status": "INFERRED",
+      "traffic_light": "注意",
+      "last_verified_at": null,
+      "verified_by": ""
+    },
+    {
+      "record_id": "SAMPLE-003",
+      "case_key": "CASE-DEMO-003",
+      "case_name": "匿名示例案 C",
+      "owners": ["role:designer-c"],
+      "collaborators": [],
+      "phase": "採購",
+      "last_verified_progress": {
+        "summary": "等待外部廠商回覆",
+        "verified_at": "2026-09-06T17:00:00+08:00",
+        "evidence_refs": [
+          {
+            "source": "FIXTURE",
+            "ref": "fixture://case-demo-003/vendor-wait",
+            "observed_at": "2026-09-06T17:00:00+08:00"
+          }
+        ]
+      },
+      "today_completed": "今日無可驗證完成",
+      "next_step": "取得廠商交期後重排",
+      "planned_completion_date": "2026-09-07",
+      "blockers": [
+        {
+          "summary": "等待外部交期",
+          "owner": "external:vendor",
+          "status": "OPEN",
+          "needed_by": "2026-09-07"
+        }
+      ],
+      "director_decisions": [],
+      "evidence_refs": [],
+      "evidence_status": "BLOCKED_EXTERNAL",
+      "traffic_light": "延誤",
+      "last_verified_at": "2026-09-06T17:00:00+08:00",
+      "verified_by": "fixture-validator"
+    },
+    {
+      "record_id": "SAMPLE-004",
+      "case_key": "CASE-DEMO-004",
+      "case_name": "匿名示例案 D",
+      "owners": ["role:unassigned"],
+      "collaborators": [],
+      "phase": "待確認",
+      "last_verified_progress": {
+        "summary": "沒有可驗證來源",
+        "verified_at": null,
+        "evidence_refs": []
+      },
+      "today_completed": "",
+      "next_step": "確認正式案件與負責人",
+      "planned_completion_date": null,
+      "blockers": [],
+      "director_decisions": [
+        {
+          "question": "請指定負責角色與正式案件 key",
+          "needed_by": null,
+          "status": "PENDING"
+        }
+      ],
+      "evidence_refs": [],
+      "evidence_status": "UNKNOWN",
+      "traffic_light": "未知",
+      "last_verified_at": null,
+      "verified_by": ""
+    }
+  ]
+}
